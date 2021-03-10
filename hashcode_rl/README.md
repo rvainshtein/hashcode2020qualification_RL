@@ -18,3 +18,9 @@
     1. Each day.
     1. Every n days.
 1. Discount factor should be high (we don't care when the score is achieved as long as it's in D days).
+
+
+## Version 1
+* Each `library` has a unique set of `books`.
+* `reward` is given at the end of the episode.
+* Each `library` takes 1 day to sign up.
