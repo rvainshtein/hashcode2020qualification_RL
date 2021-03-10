@@ -3,7 +3,20 @@ from gym import spaces
 import numpy as np
 
 from libarry import Library
-from main import extract_line_data
+
+
+def extract_line_data(line):
+    return list(map(int, line.split()))
+
+
+class UniqueAction(gym.spaces.Discrete):
+    def __init__(self, n):
+        super(UniqueAction, self).__init__(n)
+        self.taken_actions = []
+
+    def sample(self):
+        action = self.np_random.choice(set(np.arange(self.n)) - set(self.taken_actions))
+        return action
 
 
 class LibrariesEnv(gym.Env):
@@ -12,14 +25,11 @@ class LibrariesEnv(gym.Env):
 
     def __init__(self, data_file):
         super(LibrariesEnv, self).__init__()
-        self.is_signing = False
-        self.lib_currently_signing = None
-        self.days_left_signing = None
-        self.total_score = 0
         self.data_file = data_file
         self.num_books, self.num_libraries, self.total_days, self.scores, self.libraries = \
             self.get_problem_info(self.data_file)
-        self.action_space = spaces.Discrete(self.num_libraries)
+        self.action_space = UniqueAction(self.num_libraries)
+        self.observation_space = spaces.Box(low=0, high=self.scores.sum(), shape=(self.num_libraries, self.total_days))
         self.reward_range = (0, np.array(self.scores).sum())
 
     @staticmethod
@@ -38,9 +48,18 @@ class LibrariesEnv(gym.Env):
                                      book_ids=books_in_lib,
                                      signup_days=signup_len,
                                      max_books_scanned_per_day=num_ship))
-        return B, L, D, scores, libraries
+        return B, L, D, np.array(scores), libraries
 
-    def step(self, action, current_day):
+    def get_initial_observation(self):
+        observation = []
+        for l in self.libraries:
+            ordered_b_score = sorted(self.scores[l.book_ids], reverse=True)
+            cumm_score = [sum(ordered_b_score[:l.max_books_scanned_per_day * (self.total_days - idx)])
+                          for idx in range(self.total_days)]
+            observation.append(cumm_score)
+        return np.array(observation)
+
+    def step(self, action):
         """Run one timestep of the environment's dynamics. When end of
                 episode is reached, you are responsible for calling `reset()`
                 to reset this environment's state.
@@ -56,25 +75,12 @@ class LibrariesEnv(gym.Env):
                     done (bool): whether the episode has ended, in which case further step() calls will return undefined results
                     info (dict): contains auxiliary diagnostic information (helpful for debugging, and sometimes learning)
                 """
-        self.update_libraries(action)
-        self.total_score += np.array([lib.scan_books() for lib in self.libraries])
-        observations = np.array([self.libraries,
-                                 self.is_signing,
-                                 self.total_days,
-                                 self.days_left_signing])
-        return observations, self.total_score, False, None
-
-    def update_libraries(self, action):
-        chosen_lib = self.libraries[action]
-        if not self.is_signing and not chosen_lib.is_signed:
-            self.days_left_signing = chosen_lib.signup_days
-            self.lib_currently_signing = action
-        else:
-            if self.days_left_signing == 0:
-                self.libraries[self.lib_currently_signing].is_signed = True
-                self.days_left_signing = None
-        if self.days_left_signing is not None:
-            self.days_left_signing -= 1
+        self.total_score += self.last_observation[action, 0]
+        self.last_observation = np.roll(self.last_observation, shift=-1, axis=1)
+        self.last_observation[:, -1] = 0
+        self.chosen_libraries.append(action)
+        self.action_space.taken_actions.append(action)
+        return self.last_observation, self.total_score, False, dict()
 
     def reset(self):
         """Resets the environment to an initial state and returns an initial
@@ -90,10 +96,11 @@ class LibrariesEnv(gym.Env):
             observation (object): the initial observation.
         """
         _, _, _, _, self.libraries = self.get_problem_info(self.data_file)
-        self.is_signing = False
-        self.lib_currently_signing = None
-        self.days_left_signing = None
+        self.chosen_libraries = []
         self.total_score = 0
+        self.last_observation = self.get_initial_observation()
+        self.action_space.taken_actions = []
+        return self.last_observation
 
     def render(self, mode=None):
         """Renders the environment.
