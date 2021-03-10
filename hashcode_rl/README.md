@@ -17,3 +17,4 @@
     1. Only at last day.
     1. Each day.
     1. Every n days.
+1. Discount factor should be high (we don't care when the score is achieved as long as it's in D days).
