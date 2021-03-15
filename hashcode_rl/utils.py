@@ -24,6 +24,7 @@ def init_weights(m):
         m.bias.data.fill_(0)
 
 
+@torch.enable_grad()
 def train(env, policy, optimizer, discount_factor, device):
     policy.train()
 
@@ -40,6 +41,10 @@ def train(env, policy, optimizer, discount_factor, device):
         action_pred = policy(state)
 
         action_prob = F.softmax(action_pred, dim=-1)
+
+        action_prob[env.action_space.taken_actions] = action_prob[env.action_space.taken_actions] * 0
+
+        action_prob = F.normalize(action_prob, dim=0)
 
         dist = distributions.Categorical(action_prob)
 

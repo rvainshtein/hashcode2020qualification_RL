@@ -80,7 +80,10 @@ class LibrariesEnv(gym.Env):
         self.last_observation[:, -1] = 0
         self.chosen_libraries.append(action)
         self.action_space.taken_actions.append(action)
-        return self.last_observation, self.total_score, False, dict()
+        if len(self.action_space.taken_actions) == self.num_libraries:
+            return self.last_observation, self.total_score, True, dict()
+        else:
+            return self.last_observation, self.total_score, False, dict()
 
     def reset(self):
         """Resets the environment to an initial state and returns an initial
